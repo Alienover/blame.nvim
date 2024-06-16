@@ -11,7 +11,7 @@ local M = {}
 ---@field committer_tz string
 ---@field filename string
 ---@field hash string
----@field previous string|nil
+---@field previous { filename: string, hash: string }?
 ---@field summary string
 ---@field content string
 
@@ -19,25 +19,38 @@ local M = {}
 ---@param blame_porcelain string[]
 ---@return Porcelain[]
 M.parse_porcelain = function(blame_porcelain)
-    local all_lines = {}
-    for _, entry in ipairs(blame_porcelain) do
-        local ident = entry:match("^%S+")
-        if not ident then
-            all_lines[#all_lines].content = entry
-        elseif #ident == 40 then
-            table.insert(all_lines, { hash = ident })
-        else
-            ident = ident:gsub("-", "_")
+  local all_lines = {}
+  for _, entry in ipairs(blame_porcelain) do
+    local ident = entry:match("^%S+")
+    if not ident then
+      all_lines[#all_lines].content = entry
+    elseif #ident == 40 then
+      table.insert(all_lines, { hash = ident })
+    else
+      ident = ident:gsub("-", "_")
 
-            local info = string.sub(entry, #ident + 2, -1)
-            if ident == "author_time" or ident == "committer_time" then
-                all_lines[#all_lines][ident] = tonumber(info)
-            else
-                all_lines[#all_lines][ident] = info
-            end
+      local info = string.sub(entry, #ident + 2, -1)
+
+      if ident == "author_time" or ident == "committer_time" then
+        all_lines[#all_lines][ident] = tonumber(info)
+      elseif ident == "previous" then
+        local value = {}
+        for token in string.gmatch(info, "%S+") do
+          if #token == 40 then
+            value.hash = token
+          else
+            value.filename = token
+          end
         end
+
+        all_lines[#all_lines][ident] = value
+      else
+        all_lines[#all_lines][ident] = info
+      end
     end
-    return all_lines
+  end
+
+  return all_lines
 end
 
 return M
