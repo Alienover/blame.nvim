@@ -168,11 +168,12 @@ function BlameStack:refresh_stack_info()
   for _, v in pairs(self.commit_stack) do
     table.insert(
       lines_text,
-      string.sub(v.hash, 0, 7)
-        .. " "
-        .. v.author
-        .. " "
-        .. os.date(self.ctx.config.date_format, v.committer_time)
+      string.format(
+        "%s %s %s",
+        string.sub(v.hash, 0, 7),
+        os.date(self.ctx.config.date_format, v.committer_time),
+        v.author
+      )
     )
   end
   local width = utils.longest_string_in_array(lines_text) + 8

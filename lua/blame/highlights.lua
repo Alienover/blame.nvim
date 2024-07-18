@@ -6,7 +6,11 @@ local M = {}
 M.create_highlights_per_hash = function(parsed_lines, config)
   local ok, comment_hl = pcall(vim.api.nvim_get_hl, 0, { name = "Comment" })
   if ok then
-    vim.api.nvim_set_hl(config.ns_id, "Comment", comment_hl)
+    vim.api.nvim_set_hl(
+      config.ns_id,
+      "Comment",
+      comment_hl --[[@as vim.api.keyset.highlight]]
+    )
   end
 
   for _, value in ipairs(parsed_lines) do

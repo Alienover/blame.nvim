@@ -12,7 +12,7 @@ local blame_enabled_options =
   { "scrollbind", "cursorbind", "cursorline", "wrap" }
 
 ---@param lines_with_hl LineWithHl[]
----@return table
+---@return string[]
 local function lines_with_hl_to_text_lines(lines_with_hl)
   local text_lines = {}
   for _, line in ipairs(lines_with_hl) do
@@ -28,43 +28,43 @@ local function lines_with_hl_to_text_lines(lines_with_hl)
   return text_lines
 end
 
---- @class BlameView
---- @field ctx Context?
---- @field config Config
---- @field commit_info CommitInfo
---- @field commit_detail CommitDetail
---- @field blame_stack BlameStack
----
---- @field window integer?
---- @field buffer integer?
---- @field original_win_opts table
---- @field blames Porcelain[]
-local BlameView = {}
+---@class BlameView
+---@field original_win_opts table
+---@field window integer?
+---@field buffer integer?
+---@field blame_stack BlameStack?
+---@field blames Porcelain[]
+---@field config Config
+---@field ctx Context
+---@field commit_info CommitInfo
+---@field commit_detail CommitDetail
+local View = {}
+View.__index = View
 
---- @return BlameView
-function BlameView:new(config)
-  local state = {
-    original_win_opts = {},
+--- @param config Config
+function View.new(config)
+  local self = setmetatable({}, View)
 
-    window = nil,
-    buffer = nil,
-  }
+  self.original_win_opts = {}
+  self.window = nil
+  self.buffer = nil
+  self.blame_stack = nil
+  self.blames = {}
 
-  setmetatable(state, { __index = self })
+  self.config = config
+  self.ctx = Context:new(config)
+  self.commit_info = CommitInfo:new(self.ctx)
+  self.commit_detail = CommitDetail:new(self.ctx)
 
-  state.config = config
-  state.ctx = Context:new(config)
-  state.commit_info = CommitInfo:new(state.ctx)
-  state.commit_detail = CommitDetail:new(state.ctx)
-
-  function state:clear()
-    setmetatable(state, { __index = self })
-  end
-
-  return state
+  return self
 end
 
-function BlameView:setup_blame_window(text_lines)
+function View:clear()
+  self = setmetatable({}, View)
+end
+
+--- @param text_lines string[]
+function View:setup_blame_window(text_lines)
   if self.window == nil then
     vim.api.nvim_command("leftabove vnew")
 
@@ -100,6 +100,9 @@ function BlameView:setup_blame_window(text_lines)
     signcolumn = "no",
   }
 
+  -- Sync cursor position before setting scrollbind and cursorline
+  self:setup_cursor()
+
   for opt, value in pairs(blame_buf_opts) do
     vim.api.nvim_set_option_value(opt, value, { buf = self.buffer })
   end
@@ -118,7 +121,7 @@ function BlameView:setup_blame_window(text_lines)
 end
 
 --- @param lines_with_hl LineWithHl[]
-function BlameView:apply_highlights(lines_with_hl)
+function View:apply_highlights(lines_with_hl)
   for _, line in ipairs(lines_with_hl) do
     for _, value in ipairs(line.values) do
       if value.hl and value.start_index > 0 and value.end_index > 0 then
@@ -135,18 +138,24 @@ function BlameView:apply_highlights(lines_with_hl)
   end
 end
 
-function BlameView:setup_cursor()
+function View:setup_cursor()
+  -- INFO: scroll to the top as the original window
+  -- to keep the cursor at the same position
   local current_top = vim.fn.line("w0", self.ctx.original_win)
     + vim.api.nvim_get_option_value(
       "scrolloff",
       { win = self.ctx.original_win }
     )
 
-  vim.api.nvim_command("execute " .. tostring(current_top))
+  vim.api.nvim_win_set_cursor(self.window, { current_top, 0 })
   vim.cmd.normal({ "zt", bang = true })
+
+  -- INFO: set cursor to the current line
+  local row = unpack(vim.api.nvim_win_get_cursor(self.ctx.original_win))
+  vim.api.nvim_win_set_cursor(self.window, { row, 0 })
 end
 
-function BlameView:setup_autocmd()
+function View:setup_autocmd()
   self.auto_group = vim.api.nvim_create_augroup("NvimBlame", { clear = true })
 
   vim.api.nvim_create_autocmd({ "BufHidden", "BufUnload" }, {
@@ -174,7 +183,7 @@ function BlameView:setup_autocmd()
   })
 end
 
-function BlameView:setup_keybinds()
+function View:setup_keybinds()
   --- @param fn fun(commit: Porcelain)
   local function with_commit(fn)
     return function()
@@ -215,7 +224,7 @@ function BlameView:setup_keybinds()
 end
 
 --- @param lines Porcelain[]
-function BlameView:create_highlights(lines)
+function View:create_highlights(lines)
   highlights.create_highlights_per_hash(lines, self.ctx.config)
 
   local lines_with_hl =
@@ -226,7 +235,7 @@ function BlameView:create_highlights(lines)
 end
 
 --- @param next_win integer?
-function BlameView:close(next_win)
+function View:close(next_win)
   if not self:is_open() then
     return
   end
@@ -278,7 +287,7 @@ function BlameView:close(next_win)
 end
 
 --- @param blames Porcelain[]
-function BlameView:render(blames)
+function View:render(blames)
   local text_lines, lines_with_hl = self:create_highlights(blames)
 
   self:setup_blame_window(text_lines)
@@ -288,7 +297,7 @@ function BlameView:render(blames)
   self.blames = blames
 end
 
-function BlameView:open()
+function View:open()
   local filename = vim.api.nvim_buf_get_name(self.ctx.original_buf)
 
   self.ctx.git_client:blame(filename, nil, function(data)
@@ -302,9 +311,6 @@ function BlameView:open()
 
     self:render(lines)
 
-    -- Sync cursor position
-    self:setup_cursor()
-
     self:setup_autocmd()
     self:setup_keybinds()
 
@@ -315,13 +321,13 @@ function BlameView:open()
   end)
 end
 
-function BlameView:is_open()
+function View:is_open()
   return self.window ~= nil and vim.api.nvim_win_is_valid(self.window)
 end
 
 --- @param filename string
 --- @param commit string?
-function BlameView:update(filename, commit)
+function View:update(filename, commit)
   if self:is_open() then
     self.ctx.git_client:blame(filename, commit, function(data)
       local lines = blames_parser.parse_porcelain(data)
@@ -331,4 +337,4 @@ function BlameView:update(filename, commit)
   end
 end
 
-return BlameView
+return View

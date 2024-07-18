@@ -1,21 +1,20 @@
 local config = require("blame.config")
 local blame_view = require("blame.views.blame")
 
----@class Blame
----@field config Config?
----@field last_opened_view nil | BlameView
 local M = {
+  ---@type Config?
   config = nil,
+
+  ---@type BlameView?
   last_opened_view = nil,
 }
 
----@return boolean | nil
 M.is_open = function()
   return M.last_opened_view ~= nil and M.last_opened_view:is_open()
 end
 
 M.blame = function()
-  local view = blame_view:new(M.config)
+  local view = blame_view.new(M.config)
 
   -- normal open blame window
   if M.last_opened_view == nil or not M.last_opened_view:is_open() then
@@ -41,7 +40,7 @@ end
 
 ---@param setup_args Config | nil
 M.setup = function(setup_args)
-  M.config = vim.tbl_deep_extend("force", config, setup_args or {})
+  M.config = vim.tbl_deep_extend("force", config, setup_args or {}) --[[@as Config]]
 
   vim.api.nvim_create_user_command("BlameToggle", M.blame, {})
 end
