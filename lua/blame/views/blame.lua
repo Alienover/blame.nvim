@@ -139,15 +139,6 @@ function View:apply_highlights(lines_with_hl)
 end
 
 function View:setup_cursor()
-  -- INFO: scroll to the top as the original window
-  -- to keep the cursor at the same position
-  local current_top = vim.fn.line("w0", self.ctx.original_win)
-    + vim.api.nvim_get_option_value(
-      "scrolloff",
-      { win = self.ctx.original_win }
-    )
-
-  vim.api.nvim_win_set_cursor(self.window, { current_top, 0 })
   vim.cmd.normal({ "zt", bang = true })
 
   -- INFO: set cursor to the current line
